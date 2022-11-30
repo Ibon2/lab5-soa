@@ -12,6 +12,8 @@ import org.springframework.stereotype.Controller
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseBody
+import soa.camel.Router.MagicNumbers.n
+import soa.camel.Router.MagicNumbers.value
 
 @SpringBootApplication
 class Application
@@ -33,14 +35,6 @@ class SearchController(private val producerTemplate: ProducerTemplate) {
     @RequestMapping(value = ["/search"])
     @ResponseBody
     fun search(@RequestParam("q") q: String?): Any {
-        if (q != null && q.contains("max:")) {
-            val parts: List<String> = q.split(":")
-            val partsSpace: List<String> = q.split(" ")
-            val maxNumber = parts[1]
-            val query = partsSpace[0]
-            var paramss = "?count=" + maxNumber
-            return producerTemplate.requestBodyAndHeader(DIRECT_ROUTE, paramss, "keywords", query)
-        }
         return producerTemplate.requestBodyAndHeader(DIRECT_ROUTE, "", "keywords", q)
     }
 }
@@ -49,9 +43,25 @@ class SearchController(private val producerTemplate: ProducerTemplate) {
 class Router(meterRegistry: MeterRegistry) : RouteBuilder() {
 
     private val perKeywordMessages = TaggedCounter("per-keyword-messages", "keyword", meterRegistry)
-
+    object MagicNumbers {
+        const val value = 5
+        const val n = 4
+    }
     override fun configure() {
-        from(DIRECT_ROUTE)
+        from(DIRECT_ROUTE).process { exchange ->
+            val keywords: String = exchange.getIn()
+                    .getHeader("keywords") as? String ?: ""
+            val (max, remain) = keywords.split(" ")
+                    .partition { it.startsWith("max:") }
+            exchange.getIn().setHeader("keywords", remain.joinToString(" "))
+            exchange.getIn().setHeader("count", value)
+            max.firstOrNull()
+                    ?.drop(n)
+                    ?.toIntOrNull()
+                    ?.let { count ->
+                        exchange.getIn().setHeader("count", count)
+                    }
+        }
             .toD("twitter-search:\${header.keywords}\${body}")
             .wireTap(LOG_ROUTE)
             .wireTap(COUNT_ROUTE)
