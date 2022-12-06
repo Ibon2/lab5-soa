@@ -62,7 +62,7 @@ class Router(meterRegistry: MeterRegistry) : RouteBuilder() {
                     exchange.getIn().setHeader("count", count)
                 }
         }
-            .toD("twitter-search:\${header.keywords}\${body}")
+            .toD("twitter-search:\${header.keywords}")
             .wireTap(LOG_ROUTE)
             .wireTap(COUNT_ROUTE)
 
