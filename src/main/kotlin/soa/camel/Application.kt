@@ -26,6 +26,7 @@ const val DIRECT_ROUTE = "direct:twitter"
 const val COUNT_ROUTE = "direct:extractor"
 const val LOG_ROUTE = "direct:log"
 const val INDEX_VIEW = "index"
+const val DEFAULT_MAX = 5
 
 @Controller
 class SearchController(private val producerTemplate: ProducerTemplate) {
@@ -43,26 +44,24 @@ class SearchController(private val producerTemplate: ProducerTemplate) {
 class Router(meterRegistry: MeterRegistry) : RouteBuilder() {
 
     private val perKeywordMessages = TaggedCounter("per-keyword-messages", "keyword", meterRegistry)
-    object MagicNumbers {
-        const val value = 5
-        const val n = 4
-    }
+
     override fun configure() {
         from(DIRECT_ROUTE).process { exchange ->
+            val nMax = "max:"
             val keywords: String = exchange.getIn()
                 .getHeader("keywords") as? String ?: ""
             val (max, remain) = keywords.split(" ")
                 .partition { it.startsWith("max:") }
             exchange.getIn().setHeader("keywords", remain.joinToString(" "))
-            exchange.getIn().setHeader("count", value)
+            exchange.getIn().setHeader("count", DEFAULT_MAX)
             max.firstOrNull()
-                ?.drop(n)
+                ?.drop(nMax.length)
                 ?.toIntOrNull()
                 ?.let { count ->
                     exchange.getIn().setHeader("count", count)
                 }
         }
-            .toD("twitter-search:\${header.keywords}")
+            .toD("twitter-search:\${header.keywords}?count=\${header.count}")
             .wireTap(LOG_ROUTE)
             .wireTap(COUNT_ROUTE)
 
